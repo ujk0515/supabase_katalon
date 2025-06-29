@@ -354,7 +354,6 @@ function createIntegratedScriptWithSupabase(preconditionScript, summaryScript, s
 // Mapping Tables: katalon_mapping_complete, katalon_mapping_observer
 // ========================================
 
-@Test
 def testCase() {
     try {
         // Supabase-powered test case execution
