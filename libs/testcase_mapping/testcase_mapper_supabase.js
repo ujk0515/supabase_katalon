@@ -1,106 +1,18 @@
 /**
- * 테스트케이스 매퍼 수파베이스 연동 버전 (오프라인 100% 수준)
- * libs/testcase_mapping/testcase_mapper_supabase.js
- * 
- * 역할: 수파베이스에서 매핑 검색 및 카탈론 스크립트 생성
- * 파싱은 기존 testcase_parser.js 사용
+ * 간단한 테스트케이스 매핑 시스템 (새 버전)
+ * 핵심 기능만 200줄로 구현
  */
 
 // ================================
-// 전역 변수 관리
+// 전역 변수
 // ================================
 window.parsedTestcaseData = null;
 window.generatedScript = null;
 
 // ================================
-// 안전한 함수 호출을 위한 유틸리티
+// 1. 테스트케이스 데이터 추출 (기존 파서 사용)
 // ================================
 
-/**
- * 안전한 기존 파싱 함수 호출
- */
-function safeParseTestcase(input) {
-  // 1. window.TestcaseParser.parseTestcase 시도
-  if (window.TestcaseParser && typeof window.TestcaseParser.parseTestcase === 'function') {
-    console.log('✅ TestcaseParser.parseTestcase 사용');
-    return window.TestcaseParser.parseTestcase(input);
-  }
-  
-  // 2. 전역 parseTestcase 함수 시도
-  if (typeof window.parseTestcase === 'function') {
-    console.log('✅ 전역 parseTestcase 사용');
-    return window.parseTestcase(input);
-  }
-  
-  console.warn('⚠️ 파싱 함수를 찾을 수 없습니다');
-  return { summary: '', precondition: [], steps: [], expectedResult: '' };
-}
-
-/**
- * 안전한 기존 표시 함수 호출
- */
-function safeDisplayParsedData(data) {
-  // 1. window.TestcaseParser.displayParsedData 시도
-  if (window.TestcaseParser && typeof window.TestcaseParser.displayParsedData === 'function') {
-    console.log('✅ TestcaseParser.displayParsedData 사용');
-    return window.TestcaseParser.displayParsedData(data);
-  }
-  
-  // 2. 전역 displayParsedData 함수 시도
-  if (typeof window.displayParsedData === 'function') {
-    console.log('✅ 전역 displayParsedData 사용');
-    return window.displayParsedData(data);
-  }
-  
-  console.warn('⚠️ 표시 함수를 찾을 수 없습니다');
-}
-
-/**
- * 안전한 키워드 추출 함수 호출
- */
-function safeExtractKeywords(text) {
-  // 1. window.TestcaseParser.extractKeywords 시도
-  if (window.TestcaseParser && typeof window.TestcaseParser.extractKeywords === 'function') {
-    return window.TestcaseParser.extractKeywords(text);
-  }
-  
-  // 2. 전역 extractKeywords 함수 시도
-  if (typeof window.extractKeywords === 'function') {
-    return window.extractKeywords(text);
-  }
-  
-  // 3. 기본 키워드 추출 로직
-  console.warn('⚠️ 키워드 추출 함수 없음 - 기본 로직 사용');
-  if (!text || typeof text !== 'string') return [];
-  
-  const words = text
-    .replace(/[^\w\s가-힣]/g, ' ')
-    .split(/\s+/)
-    .filter(word => word.length > 1)
-    .map(word => word.toLowerCase().trim())
-    .filter(word => word.length > 0);
-  
-  return [...new Set(words)];
-}
-
-/**
- * 안전한 Supabase 함수 호출
- */
-function safeSupabaseCall(functionName, defaultValue = null) {
-  if (typeof window[functionName] === 'function') {
-    return window[functionName];
-  }
-  console.warn(`⚠️ ${functionName} 함수가 없습니다 - 기본값 반환`);
-  return () => defaultValue;
-}
-
-// ================================
-// 기존 UI 제어 함수들 (파싱 관련은 기존 함수 사용)
-// ================================
-
-/**
- * 테스트케이스 데이터 추출 (기존 함수 호출)
- */
 async function extractTestcaseData() {
   const input = document.getElementById('testcaseInput').value.trim();
   console.log('📝 입력된 텍스트:', input);
@@ -110,9 +22,8 @@ async function extractTestcaseData() {
     return;
   }
   
-  // 로딩 상태 표시
+  // 로딩 표시
   const extractBtn = document.querySelector('.extract-btn');
-  const originalText = extractBtn ? extractBtn.textContent : '📊 데이터 추출';
   if (extractBtn) {
     extractBtn.textContent = '🔄 파싱 중...';
     extractBtn.disabled = true;
@@ -129,9 +40,7 @@ async function extractTestcaseData() {
     
     // 스크립트 전환 버튼 활성화
     const convertBtn = document.getElementById('convertBtn');
-    if (convertBtn) {
-      convertBtn.disabled = false;
-    }
+    if (convertBtn) convertBtn.disabled = false;
     
     console.log('🎉 파싱 완료');
     
@@ -139,416 +48,685 @@ async function extractTestcaseData() {
     console.error('❌ 파싱 오류:', error);
     alert('파싱 중 오류가 발생했습니다: ' + error.message);
   } finally {
-    // 로딩 상태 해제
     if (extractBtn) {
-      extractBtn.textContent = originalText;
+      extractBtn.textContent = '📊 데이터 추출';
       extractBtn.disabled = false;
     }
   }
 }
 
 // ================================
-// 오프라인 100% 수준 강화 함수들
+// 2. 키워드 추출 (단순화)
 // ================================
 
-/**
- * 완벽한 Object Repository 경로 생성 (오프라인 수준)
- */
-function generateSmartObjectRepository(text, sectionName, index) {
-  const cleanText = text
-    .replace(/[^\w\sㄱ-ㅎ가-힣]/g, ' ')
-    .replace(/\s+/g, '_')
-    .trim();
+function extractKeywords(text) {
+  if (!text) return [];
   
-  // Steps만 인덱스 추가, 나머지는 깔끔하게
-  const objectName = sectionName === 'Steps' ? 
-    `${index}_${cleanText}_element` : 
-    `${cleanText}_element`;
+  // 한글, 영어 단어만 추출 (2글자 이상)
+  const words = text
+    .replace(/[^\w\s가-힣]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 2)
+    .map(word => word.toLowerCase())
+    .filter(word => !/^\d+\.?$/.test(word)); // 숫자 제거
   
-  return `Object Repository/${objectName}`;
+  return [...new Set(words)]; // 중복 제거
 }
 
-/**
- * 오프라인 수준 컨텍스트 기반 액션 결정
- */
-function determineSmartAction(text, sectionName, keywords) {
+// ================================
+// 3. 수파베이스 철저한 매핑 검색
+// ================================
+
+async function findMapping(text) {
+  console.log(`🔍 매핑 검색 시작: "${text}"`);
+  
+  const keywords = extractKeywords(text);
+  console.log(`🔤 추출된 키워드: [${keywords.join(', ')}]`);
+  
+  // 1단계: 전체 문장으로 검색
+  console.log('🎯 1단계: 전체 문장 검색');
+  if (window.findMappingInSupabase) {
+    const fullTextResult = await window.findMappingInSupabase(text.trim());
+    if (fullTextResult.found) {
+      console.log(`✅ 전체 문장 매핑 발견: "${text}" → ${fullTextResult.action}`);
+      return {
+        action: fullTextResult.action,
+        type: fullTextResult.type || 'verification',
+        groovyCode: fullTextResult.mapping?.groovy_code || null,
+        source: 'supabase_full'
+      };
+    }
+  }
+  
+  // 2단계: 키워드 조합으로 검색 (모든 조합 시도)
+  console.log('🎯 2단계: 키워드 조합 검색');
+  if (keywords.length >= 2 && window.findMappingInSupabase) {
+    // 2개 키워드 조합
+    for (let i = 0; i < keywords.length - 1; i++) {
+      for (let j = i + 1; j < keywords.length; j++) {
+        const combination = `${keywords[i]} ${keywords[j]}`;
+        console.log(`🔍 조합 검색: "${combination}"`);
+        const result = await window.findMappingInSupabase(combination);
+        if (result.found) {
+          console.log(`✅ 조합 매핑 발견: "${combination}" → ${result.action}`);
+          return {
+            action: result.action,
+            type: result.type || 'verification',
+            groovyCode: result.mapping?.groovy_code || null,
+            source: 'supabase_combination'
+          };
+        }
+      }
+    }
+    
+    // 3개 키워드 조합
+    if (keywords.length >= 3) {
+      for (let i = 0; i < keywords.length - 2; i++) {
+        for (let j = i + 1; j < keywords.length - 1; j++) {
+          for (let k = j + 1; k < keywords.length; k++) {
+            const combination = `${keywords[i]} ${keywords[j]} ${keywords[k]}`;
+            console.log(`🔍 3개 조합 검색: "${combination}"`);
+            const result = await window.findMappingInSupabase(combination);
+            if (result.found) {
+              console.log(`✅ 3개 조합 매핑 발견: "${combination}" → ${result.action}`);
+              return {
+                action: result.action,
+                type: result.type || 'verification',
+                groovyCode: result.mapping?.groovy_code || null,
+                source: 'supabase_triple'
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // 3단계: 개별 키워드 철저 검색 (모든 키워드 시도)
+  console.log('🎯 3단계: 개별 키워드 철저 검색');
+  const foundMappings = [];
+  
+  if (window.findMappingInSupabase) {
+    for (const keyword of keywords) {
+      console.log(`🔍 개별 키워드 검색: "${keyword}"`);
+      const result = await window.findMappingInSupabase(keyword);
+      if (result.found) {
+        console.log(`✅ 개별 키워드 매핑 발견: "${keyword}" → ${result.action}`);
+        foundMappings.push({
+          action: result.action,
+          type: result.type || 'verification',
+          groovyCode: result.mapping?.groovy_code || null,
+          source: 'supabase_individual',
+          keyword: keyword,
+          priority: getPriorityScore(keyword, text)
+        });
+      }
+    }
+  }
+  
+  // 가장 우선순위 높은 매핑 선택
+  if (foundMappings.length > 0) {
+    const bestMapping = foundMappings.sort((a, b) => b.priority - a.priority)[0];
+    console.log(`🎯 최우선 매핑 선택: "${bestMapping.keyword}" → ${bestMapping.action} (우선순위: ${bestMapping.priority})`);
+    return bestMapping;
+  }
+  
+  // 4단계: 다른 테이블들 검색 시도
+  console.log('🎯 4단계: 다른 테이블 검색 시도');
+  const alternativeResult = await searchAlternativeTables(text, keywords);
+  if (alternativeResult) {
+    console.log(`✅ 대체 테이블에서 매핑 발견: ${alternativeResult.action}`);
+    return alternativeResult;
+  }
+  
+  // 5단계: 유사어/동의어로 재검색
+  console.log('🎯 5단계: 유사어/동의어 검색');
+  const synonymResult = await searchWithSynonyms(keywords);
+  if (synonymResult) {
+    console.log(`✅ 유사어로 매핑 발견: ${synonymResult.action}`);
+    return synonymResult;
+  }
+  
+  // 최종: 로컬 fallback 매핑
+  console.log('🎯 최종 단계: 로컬 fallback 매핑');
+  const localMapping = getLocalMapping(text, keywords);
+  console.log(`🎯 로컬 매핑 적용: ${localMapping.action}`);
+  return localMapping;
+}
+
+// 키워드 우선순위 점수 계산
+function getPriorityScore(keyword, originalText) {
+  let score = 0;
+  
+  // 액션 관련 키워드는 높은 점수
+  const actionKeywords = ['클릭', 'click', '입력', 'input', '업로드', 'upload', '다운로드', 'download', '확인', 'verify'];
+  if (actionKeywords.includes(keyword.toLowerCase())) score += 10;
+  
+  // 텍스트 앞부분에 있으면 높은 점수
+  const position = originalText.toLowerCase().indexOf(keyword.toLowerCase());
+  if (position >= 0) {
+    score += Math.max(0, 10 - Math.floor(position / 10));
+  }
+  
+  // 키워드 길이가 길수록 높은 점수 (더 구체적)
+  score += Math.min(5, keyword.length);
+  
+  return score;
+}
+
+// 대체 테이블 검색 (상위 4개 테이블만 사용)
+async function searchAlternativeTables(text, keywords) {
+  console.log('🚀 상위 4개 테이블 병렬 검색 시작...');
+  
+  // 기존에 동작하는 함수가 있는지 확인
+  if (!window.findMappingInSupabase || typeof window.findMappingInSupabase !== 'function') {
+    console.warn('findMappingInSupabase 함수를 찾을 수 없습니다.');
+    return null;
+  }
+  
+  console.log('✅ findMappingInSupabase 함수 발견');
+  
+  // 상위 4개 테이블 직접 검색 시도
+  let supabaseClient = null;
+  if (window.getSupabaseClient) {
+    supabaseClient = window.getSupabaseClient();
+  } else if (typeof window.supabase === 'function') {
+    supabaseClient = window.supabase();
+  } else {
+    supabaseClient = window.supabase;
+  }
+  
+  const searchPromises = [];
+  
+  // 상위 4개 테이블 직접 검색
+  if (supabaseClient && typeof supabaseClient.from === 'function') {
+    console.log('✅ 수파베이스 직접 접근 가능 - 상위 4개 테이블 검색');
+    
+    const topTables = [
+      { name: 'keyword_mappings', priority: 10, searchColumns: 'keyword.ilike.%{keyword}%,action.ilike.%{keyword}%,meaning.ilike.%{keyword}%' },
+      { name: 'complete_mappings', priority: 9, searchColumns: 'keywords.cs.{"{keyword}"},action.ilike.%{keyword}%,groovy_code.ilike.%{keyword}%' },
+      { name: 'katalon_mapping_complete', priority: 8, searchColumns: 'keywords.cs.{"{keyword}"},action.ilike.%{keyword}%' },
+      { name: 'katalon_mapping_observer', priority: 7, searchColumns: 'keywords.cs.{"{keyword}"},action.ilike.%{keyword}%' }
+    ];
+    
+    // 키워드별로 상위 4개 테이블 검색
+    for (const keyword of keywords.slice(0, 3)) {
+      for (const table of topTables) {
+        const searchQuery = table.searchColumns.replace(/{keyword}/g, keyword);
+        
+        searchPromises.push(
+          supabaseClient
+            .from(table.name)
+            .select('*')
+            .or(searchQuery)
+            .limit(1)
+            .then(({ data }) => {
+              if (data?.[0]) {
+                console.log(`✅ ${table.name}에서 발견: "${keyword}" → ${data[0].action}`);
+                return { 
+                  ...data[0], 
+                  source: table.name, 
+                  keyword, 
+                  priority: table.priority + getPriorityScore(keyword, text)
+                };
+              }
+              return null;
+            })
+            .catch(err => {
+              console.warn(`${table.name} 검색 실패 (${keyword}):`, err.message);
+              return null;
+            })
+        );
+      }
+    }
+    
+    // 전체 문장으로도 검색
+    for (const table of topTables) {
+      const searchQuery = table.searchColumns.replace(/{keyword}/g, text.trim());
+      
+      searchPromises.push(
+        supabaseClient
+          .from(table.name)
+          .select('*')
+          .or(searchQuery)
+          .limit(1)
+          .then(({ data }) => {
+            if (data?.[0]) {
+              console.log(`✅ ${table.name}에서 전체 문장 발견: "${text}" → ${data[0].action}`);
+              return { 
+                ...data[0], 
+                source: table.name, 
+                keyword: 'full_text', 
+                priority: table.priority + 20 // 전체 문장은 높은 우선순위
+              };
+            }
+            return null;
+          })
+          .catch(err => {
+            console.warn(`${table.name} 전체 문장 검색 실패:`, err.message);
+            return null;
+          })
+      );
+    }
+  }
+  
+  // 기존 findMappingInSupabase 함수도 병렬로 실행
+  for (const keyword of keywords.slice(0, 3)) {
+    searchPromises.push(
+      window.findMappingInSupabase(keyword)
+        .then(result => {
+          if (result && result.found) {
+            console.log(`✅ findMappingInSupabase에서 발견: "${keyword}" → ${result.action}`);
+            return { 
+              ...result, 
+              keyword, 
+              priority: 5 + getPriorityScore(keyword, text), // 기존 함수는 중간 우선순위
+              source: 'findMappingInSupabase'
+            };
+          }
+          return null;
+        })
+        .catch(err => {
+          console.warn(`findMappingInSupabase 검색 실패 (${keyword}):`, err.message);
+          return null;
+        })
+    );
+  }
+  
+  try {
+    console.log(`⚡ ${searchPromises.length}개 검색 병렬 실행 중...`);
+    
+    // 모든 검색을 병렬로 실행 (최대 3초 타임아웃)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('검색 타임아웃')), 3000)
+    );
+    
+    const results = await Promise.race([
+      Promise.allSettled(searchPromises),
+      timeoutPromise
+    ]);
+    
+    // 성공한 결과들만 필터링
+    const successfulResults = results
+      .filter(result => result.status === 'fulfilled' && result.value)
+      .map(result => result.value);
+    
+    if (successfulResults.length > 0) {
+      // 우선순위로 정렬 (높은 점수 우선)
+      const bestResult = successfulResults.sort((a, b) => b.priority - a.priority)[0];
+      
+      console.log(`✅ 최고 우선순위 매핑 선택: "${bestResult.keyword}" → ${bestResult.action} (우선순위: ${bestResult.priority}, 소스: ${bestResult.source})`);
+      
+      return {
+        action: bestResult.action,
+        type: bestResult.type || 'verification',
+        groovyCode: bestResult.groovy_code || bestResult.mapping?.groovy_code || null,
+        source: bestResult.source
+      };
+    }
+    
+    console.log('❌ 모든 검색 실패');
+    return null;
+    
+  } catch (error) {
+    console.warn('병렬 검색 에러:', error.message);
+    return null;
+  }
+}
+
+// 카테고리에서 액션 추론
+function inferActionFromCategory(category) {
+  const categoryActionMap = {
+    'click': 'Click',
+    'input': 'Set Text',
+    'verification': 'Verify Element Present',
+    'upload': 'Upload File',
+    'download': 'Download File',
+    'navigation': 'Navigate To Url'
+  };
+  
+  return categoryActionMap[category.toLowerCase()] || 'Verify Element Present';
+}
+
+// 유사어/동의어로 검색
+async function searchWithSynonyms(keywords) {
+  const synonymMap = {
+    '업로드': ['upload', '올리기', '전송', '파일업로드'],
+    '다운로드': ['download', '내려받기', '받기'],
+    '클릭': ['click', '누르기', '터치', '선택'],
+    '입력': ['input', '작성', '기입', '넣기'],
+    '확인': ['verify', '검증', '체크', '점검'],
+    '표시': ['display', '노출', '보임', '나타남'],
+    '팝업': ['popup', '모달', 'modal', '대화상자'],
+    '파일': ['file', '문서', '데이터'],
+    '용량': ['size', '크기', '사이즈']
+  };
+  
+  if (!window.findMappingInSupabase) return null;
+  
+  for (const keyword of keywords) {
+    const synonyms = synonymMap[keyword.toLowerCase()] || [];
+    
+    for (const synonym of synonyms) {
+      console.log(`🔍 유사어 검색: "${keyword}" → "${synonym}"`);
+      const result = await window.findMappingInSupabase(synonym);
+      if (result.found) {
+        return {
+          action: result.action,
+          type: result.type || 'verification',
+          groovyCode: result.mapping?.groovy_code || null,
+          source: 'supabase_synonym'
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+// ================================
+// 4. 강화된 로컬 fallback 매핑
+// ================================
+
+function getLocalMapping(text, keywords) {
   const lowerText = text.toLowerCase();
-  const section = sectionName.toLowerCase();
   
-  // Precondition: 항상 Get Attribute
-  if (section === 'precondition') {
-    return {
-      action: 'Get Attribute',
-      type: 'verification',
-      groovyTemplate: 'comment'
-    };
+  // 우선순위 순서로 체크 (더 구체적인 매핑)
+  
+  // 1. 파일 업로드 관련 (최우선)
+  if (lowerText.includes('업로드') || lowerText.includes('upload') || lowerText.includes('파일선택')) {
+    return { action: 'Upload File', type: 'upload', source: 'local' };
   }
   
-  // Steps: 세밀한 키워드 분석
-  if (section === 'steps') {
-    // 비밀번호는 특별 처리 (보안)
-    if (lowerText.includes('비밀번호') || lowerText.includes('password') || lowerText.includes('패스워드')) {
-      return { 
-        action: 'Set Encrypted Text', 
-        type: 'encrypted_input', 
-        groovyTemplate: 'encryptedText' 
-      };
-    }
-    
-    // 입력 관련
-    if (lowerText.includes('입력') || lowerText.includes('이메일') || lowerText.includes('아이디')) {
-      return { 
-        action: 'Set Text', 
-        type: 'input', 
-        groovyTemplate: 'setText' 
-      };
-    }
-    
-    // 확인/검증 관련 (클릭보다 검증 우선)
-    if (lowerText.includes('확인') && !lowerText.includes('클릭')) {
-      return { 
-        action: 'Verify Element Present', 
-        type: 'verification', 
-        groovyTemplate: 'verify' 
-      };
-    }
-    
-    // 클릭 관련
-    if (lowerText.includes('클릭') || lowerText.includes('버튼')) {
-      return { 
-        action: 'Click', 
-        type: 'click', 
-        groovyTemplate: 'click' 
-      };
-    }
+  // 2. 파일 다운로드 관련
+  if (lowerText.includes('다운로드') || lowerText.includes('download') || lowerText.includes('내려받기')) {
+    return { action: 'Download File', type: 'download', source: 'local' };
   }
   
-  // Summary & Expected Result: 주로 검증
-  if (section === 'summary' || section === 'expected result') {
-    // 메시지 표시는 Visible 체크
-    if (lowerText.includes('메시지') || lowerText.includes('표시')) {
-      return { 
-        action: 'Verify Element Visible', 
-        type: 'visibility', 
-        groovyTemplate: 'verifyVisible' 
-      };
-    }
-    
-    // 동작/클릭 관련
-    if (lowerText.includes('클릭') || lowerText.includes('동작')) {
-      return { 
-        action: 'Click', 
-        type: 'click', 
-        groovyTemplate: 'click' 
-      };
-    }
-    
-    // 기본값
-    return { 
-      action: 'Verify Element Present', 
-      type: 'verification', 
-      groovyTemplate: 'verify' 
-    };
+  // 3. 비밀번호 (보안 최우선)
+  if (lowerText.includes('비밀번호') || lowerText.includes('password') || lowerText.includes('패스워드')) {
+    return { action: 'Set Encrypted Text', type: 'encrypted_input', source: 'local' };
   }
   
-  return { action: 'Comment', type: 'comment', groovyTemplate: 'comment' };
+  // 4. 입력 관련
+  if (lowerText.includes('입력') || lowerText.includes('이메일') || lowerText.includes('아이디') || lowerText.includes('작성')) {
+    return { action: 'Set Text', type: 'input', source: 'local' };
+  }
+  
+  // 5. 클릭 관련
+  if (lowerText.includes('클릭') || lowerText.includes('버튼') || lowerText.includes('로그인') || lowerText.includes('선택')) {
+    return { action: 'Click', type: 'click', source: 'local' };
+  }
+  
+  // 6. 팝업/모달 관련
+  if (lowerText.includes('팝업') || lowerText.includes('모달') || lowerText.includes('대화상자')) {
+    return { action: 'Verify Element Visible', type: 'visibility', source: 'local' };
+  }
+  
+  // 7. 표시/노출 관련
+  if (lowerText.includes('표시') || lowerText.includes('노출') || lowerText.includes('메시지') || lowerText.includes('나타남')) {
+    return { action: 'Verify Element Visible', type: 'visibility', source: 'local' };
+  }
+  
+  // 8. 텍스트 가져오기 관련
+  if (lowerText.includes('텍스트') || lowerText.includes('내용') || lowerText.includes('값') || lowerText.includes('데이터')) {
+    return { action: 'Get Text', type: 'get_text', source: 'local' };
+  }
+  
+  // 9. 페이지 이동 관련
+  if (lowerText.includes('이동') || lowerText.includes('페이지') || lowerText.includes('사이트') || lowerText.includes('접속')) {
+    return { action: 'Navigate To Url', type: 'navigation', source: 'local' };
+  }
+  
+  // 10. 드래그앤드롭 관련
+  if (lowerText.includes('드래그') || lowerText.includes('끌어') || lowerText.includes('이동시')) {
+    return { action: 'Drag And Drop', type: 'drag_drop', source: 'local' };
+  }
+  
+  // 11. 기본값 (확인/검증)
+  return { action: 'Verify Element Present', type: 'verification', source: 'local' };
 }
 
-/**
- * 완벽한 그루비 스크립트 생성 (오프라인 수준)
- */
-function generateEnhancedGroovyScript(action, objectPath, text, template) {
+// ================================
+// 5. 그루비 스크립트 생성 (단순화)
+// ================================
+
+function generateGroovyScript(mapping, text, sectionName, index) {
   const cleanText = text.replace(/"/g, '\\"');
   
-  switch (template) {
-    case 'click':
+  // Object Repository 경로 생성 (단순화)
+  const objectName = generateObjectName(text, sectionName, index);
+  const objectPath = `Object Repository/${objectName}`;
+  
+  // 수파베이스에서 완전한 그루비 코드가 있으면 사용 (Comment 제외)
+  if (mapping.groovyCode && !mapping.groovyCode.includes('WebUI.comment')) {
+    return mapping.groovyCode.replace(/Object Repository\/[^']+/, objectPath);
+  }
+  
+  // WebUI.comment가 포함된 액션은 무시하고 일반 액션으로 처리
+  if (mapping.action && mapping.action.includes('WebUI.comment')) {
+    // Comment 액션을 일반 액션으로 변환
+    if (text.toLowerCase().includes('업로드')) {
+      mapping.action = 'Upload File';
+    } else if (text.toLowerCase().includes('확인') || text.toLowerCase().includes('검증')) {
+      mapping.action = 'Verify Element Present';
+    } else if (text.toLowerCase().includes('노출') || text.toLowerCase().includes('표시')) {
+      mapping.action = 'Verify Element Visible';
+    } else {
+      mapping.action = 'Verify Element Present';
+    }
+  }
+  
+  // 액션별 그루비 스크립트 생성
+  switch (mapping.action) {
+    case 'Click':
       return `WebUI.click(findTestObject('${objectPath}'))`;
     
-    case 'setText':
-      // 이메일은 특별한 값 사용
-      const inputValue = text.toLowerCase().includes('이메일') ? 'input_value' : 'testvalue';
+    case 'Set Text':
+      const inputValue = text.toLowerCase().includes('이메일') ? 'test@example.com' : 'testvalue';
       return `WebUI.setText(findTestObject('${objectPath}'), '${inputValue}')`;
     
-    case 'encryptedText':
-      return `WebUI.comment("Set Encrypted Text - ${cleanText}")`;
+    case 'Set Encrypted Text':
+      return `WebUI.setEncryptedText(findTestObject('${objectPath}'), 'encrypted_password')`;
     
-    case 'verify':
+    case 'Verify Element Present':
       return `WebUI.verifyElementPresent(findTestObject('${objectPath}'), 10)`;
     
-    case 'verifyVisible':
+    case 'Verify Element Visible':
       return `WebUI.verifyElementVisible(findTestObject('${objectPath}'))`;
     
-    case 'comment':
-      return `WebUI.comment("${action} - ${cleanText}")`;
+    case 'Navigate To Url':
+      return `WebUI.navigateToUrl('https://example.com')`;
     
     default:
-      return `WebUI.comment("${action} - ${cleanText}")`;
+      return `WebUI.comment("${mapping.action}: ${cleanText}")`;
   }
-}
-
-/**
- * 수파베이스 매핑을 완벽한 그루비 스크립트로 변환
- */
-function generateGroovyFromSupabaseMapping(mapping, objectPath, text) {
-  if (!mapping || !mapping.action) {
-    return `// TODO: No action found for: "${text}"`;
-  }
-  
-  // 수파베이스 매핑의 그루비 코드가 있으면 사용
-  if (mapping.groovy_code) {
-    return mapping.groovy_code;
-  }
-  
-  // 타입별 완벽한 그루비 스크립트 생성
-  switch (mapping.type) {
-    case 'click':
-      return `WebUI.click(findTestObject('${objectPath}'))`;
-    case 'input':
-      const inputValue = text.toLowerCase().includes('이메일') ? 'input_value' : 'testvalue';
-      return `WebUI.setText(findTestObject('${objectPath}'), '${inputValue}')`;
-    case 'verification':
-      return `WebUI.verifyElementPresent(findTestObject('${objectPath}'), 10)`;
-    default:
-      return `WebUI.comment("${mapping.action} - ${text}")`;
-  }
-}
-
-/**
- * 섹션별 액션 카운팅 (오프라인 스타일)
- */
-function countUniqueActions(sources) {
-  // 중복 제거된 소스의 개수 계산
-  const uniqueSources = [...new Set(sources)];
-  const actionCount = sources.length > 0 ? Math.max(1, Math.floor(sources.length / uniqueSources.length)) : 0;
-  return actionCount;
 }
 
 // ================================
-// 수파베이스 매핑 전용 함수들
+// 6. Object Repository 이름 생성 (단순화)
 // ================================
 
-/**
- * 매핑 스크립트 생성 메인 함수 (완벽한 오프라인 수준)
- */
+function generateObjectName(text, sectionName, index) {
+  // 핵심 키워드만 추출 (최대 3개)
+  const keywords = extractKeywords(text)
+    .filter(word => word.length >= 2)
+    .slice(0, 3);
+  
+  if (keywords.length === 0) {
+    return `${sectionName.toLowerCase()}_${index}_element`;
+  }
+  
+  return `${keywords.join('_')}_element`;
+}
+
+// ================================
+// 7. 섹션별 스크립트 생성
+// ================================
+
+async function generateSectionScript(sectionName, textArray) {
+  if (!textArray || textArray.length === 0) {
+    return `        // === ${sectionName} ===\n        // No content\n\n`;
+  }
+  
+  console.log(`🚀 ${sectionName} 섹션 처리 시작 (${textArray.length}개)`);
+  
+  let script = `        // === ${sectionName} ===\n`;
+  
+  for (let i = 0; i < textArray.length; i++) {
+    const text = textArray[i];
+    if (!text?.trim()) continue;
+    
+    console.log(`🎯 처리 중 [${i + 1}/${textArray.length}]: "${text.substring(0, 30)}..."`);
+    
+    try {
+      // 매핑 검색
+      const mapping = await findMapping(text);
+      
+      // 그루비 스크립트 생성
+      const groovyScript = generateGroovyScript(mapping, text, sectionName, i + 1);
+      
+      script += `        // ${text.trim()}\n`;
+      script += `        ${groovyScript}\n`;
+      
+      console.log(`✅ 매핑 완료: ${mapping.action} (${mapping.source})`);
+      
+    } catch (error) {
+      console.error(`❌ 매핑 실패:`, error);
+      script += `        // ${text.trim()}\n`;
+      script += `        WebUI.comment("TODO: ${text.replace(/"/g, '\\"')}")\n`;
+    }
+  }
+  
+  script += '\n';
+  console.log(`✅ ${sectionName} 섹션 완료`);
+  
+  return script;
+}
+
+// ================================
+// 8. 메인 스크립트 생성
+// ================================
+
 async function generateMappingScript() {
-  console.log('🚀 완벽한 융합 매핑 스크립트 생성 시작...');
+  console.log('🚀 간단 매핑 스크립트 생성 시작');
   
   if (!window.parsedTestcaseData) {
     alert('먼저 테스트케이스 데이터를 추출해주세요.');
     return;
   }
-
-  // 수파베이스 연결 상태 확인
-  const isConnectedFunc = safeSupabaseCall('isSupabaseConnected', () => false);
-  const initializeFunc = safeSupabaseCall('initializeSupabase', async () => false);
   
-  if (!isConnectedFunc()) {
-    console.log('🔗 수파베이스 연결 시도 중...');
-    const connected = await initializeFunc();
-    if (!connected) {
-      console.warn('⚠️ 수파베이스 연결 실패 - 로컬 매핑만 사용');
-    }
-  }
-
-  // 로딩 상태 표시
+  // 로딩 표시
   const convertBtn = document.getElementById('convertBtn');
-  const originalText = convertBtn ? convertBtn.textContent : '⚡ 스크립트 전환';
   if (convertBtn) {
-    convertBtn.textContent = '🔄 완벽한 매핑 중...';
+    convertBtn.textContent = '🔄 매핑 중...';
     convertBtn.disabled = true;
   }
-
+  
   try {
     const data = window.parsedTestcaseData;
     
-    console.log('📋 처리할 데이터:', {
-      summary: data.summary ? '✅' : '❌',
-      precondition: data.precondition?.length || 0,
-      steps: data.steps?.length || 0,
-      expectedResult: data.expectedResult ? '✅' : '❌'
+    console.log('📋 데이터 확인:', {
+      summary: data.summary ? `✅ (${data.summary.length}자)` : '❌',
+      precondition: `✅ ${data.precondition?.length || 0}개`,
+      steps: `✅ ${data.steps?.length || 0}개`,
+      expectedResult: data.expectedResult ? `✅ (${data.expectedResult.length}자)` : '❌'
     });
     
-    // 전역 중복 제거용
-    const globalUsedActions = new Set();
-
-    // 각 섹션별로 완벽한 스크립트 생성
-    console.log('🔄 Precondition 처리 중...');
-    const preconditionScript = await generateSectionScriptAsync('Precondition', data.precondition, globalUsedActions);
+    console.log('🔍 철저한 수파베이스 검색 시작 - 시간이 걸릴 수 있습니다...');
     
-    console.log('🔄 Summary 처리 중...');
-    const summaryScript = await generateSectionScriptAsync('Summary', [data.summary], globalUsedActions);
+    // 각 섹션별 스크립트 생성 (철저한 검색)
+    const preconditionScript = await generateSectionScript('Precondition', data.precondition);
+    const summaryScript = await generateSectionScript('Summary', [data.summary].filter(Boolean));
+    const stepsScript = await generateSectionScript('Steps', data.steps);
+    const expectedResultScript = await generateSectionScript('Expected Result', [data.expectedResult].filter(Boolean));
     
-    console.log('🔄 Steps 처리 중...');
-    const stepsScript = await generateSectionScriptAsync('Steps', data.steps, globalUsedActions);
+    // 전체 스크립트 조합
+    const fullScript = createFullScript(preconditionScript, summaryScript, stepsScript, expectedResultScript);
     
-    console.log('🔄 Expected Result 처리 중...');
-    const expectedResultScript = await generateSectionScriptAsync('Expected Result', [data.expectedResult], globalUsedActions);
+    // 화면에 표시
+    displayScript(fullScript);
     
-    // 통합 스크립트 생성
-    const fullScript = createIntegratedScriptWithSupabase(preconditionScript, summaryScript, stepsScript, expectedResultScript);
-    
-    // UI에 스크립트 표시
-    displayMappingScript(fullScript);
-    updateMappingStatus(true);
-    
-    console.log('🎉 완벽한 융합 매핑 스크립트 생성 완료');
-    showSuccess('✅ 완벽한 융합 매핑 완료! (오프라인 100% 수준)');
+    console.log('🎉 매핑 스크립트 생성 완료');
     
   } catch (error) {
-    console.error('❌ 완벽한 매핑 스크립트 생성 오류:', error);
-    alert('완벽한 매핑 스크립트 생성 중 오류가 발생했습니다:\n\n' + error.message);
-    showError('❌ 완벽한 매핑 실패: ' + error.message);
+    console.error('❌ 스크립트 생성 실패:', error);
+    alert('스크립트 생성 중 오류가 발생했습니다:\n' + error.message);
   } finally {
-    // 로딩 상태 해제
     if (convertBtn) {
-      convertBtn.textContent = originalText;
+      convertBtn.textContent = '⚡ 스크립트 전환';
       convertBtn.disabled = false;
     }
   }
 }
 
-/**
- * 섹션별 스크립트 생성 (완벽한 오프라인 수준)
- */
-async function generateSectionScriptAsync(sectionName, textArray, globalUsedActions) {
-  if (!textArray || textArray.length === 0) {
-    return `        // === ${sectionName} Scripts (Unified System) ===\n        // No content found for ${sectionName}\n\n`;
-  }
+// ================================
+// 9. 전체 스크립트 조합
+// ================================
+
+function createFullScript(preconditionScript, summaryScript, stepsScript, expectedResultScript) {
+  const timestamp = new Date().toLocaleString();
   
-  let script = `        // === ${sectionName} Scripts (Unified System) ===\n`;
-  let mappedCount = 0;
-  let sources = [];
-  
-  for (let index = 0; index < textArray.length; index++) {
-    const text = textArray[index];
-    if (!text || text.trim() === '') continue;
-    
-    console.log(`🔍 처리 중: "${text.substring(0, 50)}..."`);
-    
-    // 텍스트를 주석으로 처리
-    script += `        // ${sectionName} ${index + 1}: ${text.trim()}\n`;
-    
-    // 키워드 추출
-    const keywords = safeExtractKeywords(text);
-    console.log(`🔤 키워드 추출: [${keywords.join(', ')}]`);
-    
-    // 수파베이스에서 매핑 검색
-    const mappings = await findMappingsForKeywordsSupabase(keywords, globalUsedActions);
-    
-    if (mappings.length > 0) {
-      // 수파베이스 매핑 사용 (완벽한 오프라인 스타일로 변환)
-      mappings.forEach(mappingResult => {
-        const objectPath = generateSmartObjectRepository(text, sectionName, index + 1);
-        const groovyScript = generateGroovyFromSupabaseMapping(mappingResult.mapping, objectPath, text);
-        script += `        ${groovyScript}\n`;
-        sources.push(mappingResult.source);
-        mappedCount++;
-      });
-    } else {
-      // 완벽한 스마트 로컬 매핑 사용 (오프라인 수준)
-      console.log(`❌ 매핑 없음 - 완벽한 스마트 기본값 생성`);
-      const smartAction = determineSmartAction(text, sectionName, keywords);
-      const objectPath = generateSmartObjectRepository(text, sectionName, index + 1);
-      const groovyScript = generateEnhancedGroovyScript(smartAction.action, objectPath, text, smartAction.groovyTemplate);
-      
-      script += `        ${groovyScript}\n`;
-      sources.push('cache');  // 오프라인과 동일한 소스명 사용
-      mappedCount++;
-      
-      // 중복 방지
-      const actionKey = `${smartAction.action}-${smartAction.type}-${objectPath}`;
-      globalUsedActions.add(actionKey);
-    }
-  }
-  
-  // 섹션 요약 추가 (완벽한 오프라인 스타일)
-  const uniqueActionCount = countUniqueActions(sources);
-  const sourcesList = sources.length > 0 ? sources.join(', ') : 'cache';
-  script += `        // Section Summary: ${uniqueActionCount} unique actions (${sourcesList})\n`;
-  
-  return script;
-}
-
-/**
- * 여러 키워드에 대한 수파베이스 매핑 검색
- */
-async function findMappingsForKeywordsSupabase(keywords, globalUsedActions = new Set()) {
-  if (!Array.isArray(keywords) || keywords.length === 0) {
-    return [];
-  }
-
-  console.log(`🔍 수파베이스에서 ${keywords.length}개 키워드 검색 시작`);
-
-  const foundMappings = [];
-
-  try {
-    // findMappingInSupabase 함수 안전하게 호출
-    const findMappingFunc = safeSupabaseCall('findMappingInSupabase', async () => ({ found: false }));
-    
-    // 각 키워드별로 순차 검색
-    for (const keyword of keywords) {
-      const result = await findMappingFunc(keyword);
-      
-      if (result.found) {
-        // 더 정확한 중복 체크
-        const actionKey = `${result.action}-${result.type}-${result.mapping?.selector || ''}`;
-        const navigationKey = result.action === 'Navigate To Url' ? 'BROWSER_INIT' : actionKey;
-        
-        if (!globalUsedActions.has(navigationKey)) {
-          foundMappings.push(result);
-          globalUsedActions.add(navigationKey);
-          console.log(`✅ 매핑 성공: "${keyword}" → ${result.action} (${result.source})`);
-        } else {
-          console.log(`⚠️ 중복 매핑 스킵: "${keyword}" → ${result.action}`);
-        }
-      }
-    }
-
-    console.log(`📊 최종 결과: ${foundMappings.length}/${keywords.length} 매핑 성공`);
-    return foundMappings;
-
-  } catch (error) {
-    console.error('❌ 수파베이스 검색 중 오류:', error);
-    return [];
-  }
-}
-
-/**
- * 통합 스크립트 생성 (완벽한 오프라인 수준)
- */
-function createIntegratedScriptWithSupabase(preconditionScript, summaryScript, stepsScript, expectedResultScript) {
-  const header = `// ========================================
-// Katalon Mapping Script (Unified System)
-// Generated at: ${new Date().toLocaleString()}
-// Unified Mapping System: Active
-// Overall Mapping Rate: 100%
-// Total Mappings Available: 504
+  return `// ========================================
+// Katalon Test Script (Simple Version)
+// Generated at: ${timestamp}
 // ========================================
 @Test
 def testCase() {
     try {
-        // Test case execution with Unified Mapping System
         
-`;
-
-  const footer = `    } catch (Exception e) {
+${preconditionScript}${summaryScript}${stepsScript}${expectedResultScript}    } catch (Exception e) {
         WebUI.comment("Test failed: " + e.getMessage())
         throw e
     } finally {
         WebUI.closeBrowser()
     }
 }`;
-
-  return header + preconditionScript + summaryScript + stepsScript + expectedResultScript + footer;
 }
 
 // ================================
-// UI 제어 함수들 (기존 유지)
+// 10. UI 함수들
 // ================================
 
-/**
- * 스크립트 복사 기능
- */
+function displayScript(script) {
+  const scriptElement = document.getElementById('scriptResult');
+  if (!scriptElement) return;
+  
+  // 간단한 스타일링
+  const styledHTML = script
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/(WebUI\.\w+)/g, '<span style="color: #3b82f6; font-weight: bold;">$1</span>')
+    .replace(/(\/\/.*)/g, '<span style="color: #6b7280;">$1</span>');
+  
+  scriptElement.innerHTML = `<pre style="margin: 0; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4;">${styledHTML}</pre>`;
+  window.generatedScript = script;
+  
+  console.log('✅ 스크립트 화면 표시 완료');
+}
+
+// 기존 안전 함수들 (변경 없음)
+function safeParseTestcase(input) {
+  if (window.TestcaseParser?.parseTestcase) {
+    return window.TestcaseParser.parseTestcase(input);
+  }
+  if (window.parseTestcase) {
+    return window.parseTestcase(input);
+  }
+  return { summary: '', precondition: [], steps: [], expectedResult: '' };
+}
+
+function safeDisplayParsedData(data) {
+  if (window.TestcaseParser?.displayParsedData) {
+    return window.TestcaseParser.displayParsedData(data);
+  }
+  if (window.displayParsedData) {
+    return window.displayParsedData(data);
+  }
+}
+
+// 스크립트 복사 기능
 function copyScript() {
   if (!window.generatedScript) {
     alert('복사할 스크립트가 없습니다.');
@@ -556,325 +734,18 @@ function copyScript() {
   }
   
   navigator.clipboard.writeText(window.generatedScript).then(() => {
-    const copyBtn = document.querySelector('.copy-btn');
-    if (copyBtn) {
-      const originalText = copyBtn.textContent;
-      copyBtn.textContent = '✅ 복사됨';
-      copyBtn.style.background = '#10b981';
-      
-      setTimeout(() => {
-        copyBtn.textContent = originalText;
-        copyBtn.style.background = '#6366f1';
-      }, 2000);
-    }
-    showSuccess('✅ 스크립트가 클립보드에 복사되었습니다');
-  }).catch(err => {
-    console.error('복사 실패:', err);
+    alert('✅ 스크립트가 클립보드에 복사되었습니다');
+  }).catch(() => {
     alert('복사에 실패했습니다. 수동으로 복사해주세요.');
   });
 }
 
-/**
- * 입력 영역 초기화
- */
-function resetInput() {
-  if (confirm('입력된 테스트케이스를 초기화하시겠습니까?')) {
-    const inputElement = document.getElementById('testcaseInput');
-    if (inputElement) {
-      inputElement.value = '';
-    }
-    console.log('✅ 입력 영역 초기화 완료');
-  }
-}
-
-/**
- * 파싱 결과 초기화
- */
-function resetParsing() {
-  if (confirm('파싱 결과를 초기화하시겠습니까?')) {
-    const summaryElement = document.getElementById('summaryResult');
-    const preconditionElement = document.getElementById('preconditionResult');
-    const stepsElement = document.getElementById('stepsResult');
-    const expectedElement = document.getElementById('expectedResult');
-    
-    if (summaryElement) {
-      summaryElement.innerHTML = '<span class="placeholder-text">추출된 Summary가 여기에 표시됩니다</span>';
-    }
-    if (preconditionElement) {
-      preconditionElement.innerHTML = '<span class="placeholder-text">추출된 Precondition이 여기에 표시됩니다</span>';
-    }
-    if (stepsElement) {
-      stepsElement.innerHTML = '<span class="placeholder-text">추출된 Steps가 여기에 표시됩니다</span>';
-    }
-    if (expectedElement) {
-      expectedElement.innerHTML = '<span class="placeholder-text">추출된 Expected Result가 여기에 표시됩니다</span>';
-    }
-    
-    // 스크립트 전환 버튼 비활성화
-    const convertBtn = document.getElementById('convertBtn');
-    if (convertBtn) {
-      convertBtn.disabled = true;
-    }
-    
-    // 전역 변수 초기화
-    window.parsedTestcaseData = null;
-    
-    console.log('✅ 파싱 결과 초기화 완료');
-  }
-}
-
-/**
- * 생성된 스크립트 초기화
- */
-function resetScript() {
-  if (confirm('생성된 매핑 스크립트를 초기화하시겠습니까?')) {
-    const scriptElement = document.getElementById('scriptResult');
-    if (scriptElement) {
-      scriptElement.innerHTML = '<span class="placeholder-text">// 완벽한 융합 매핑 카탈론 스크립트가 여기에 생성됩니다</span>';
-    }
-    
-    // 매핑 상태 초기화
-    updateMappingStatus(false);
-    
-    // 전역 변수 초기화
-    window.generatedScript = null;
-    
-    console.log('✅ 매핑 스크립트 초기화 완료');
-  }
-}
-
-/**
- * 매핑 스크립트를 화면에 표시
- */
-function displayMappingScript(script) {
-  const scriptElement = document.getElementById('scriptResult');
-  if (!scriptElement) return;
-  
-  // 스크립트를 HTML로 변환하여 표시
-  const lines = script.split('\n');
-  let styledHTML = '';
-  
-  lines.forEach(line => {
-    const trimmedLine = line.trim();
-    const escapedLine = line
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    
-    // 완벽한 융합 시스템 관련 스타일링
-    if (trimmedLine.includes('Unified System') || trimmedLine.includes('Section Summary:')) {
-      styledHTML += `<span style="color: #10b981; font-weight: bold;">${escapedLine}</span>\n`;
-    } else if (trimmedLine.includes('TODO: No mapping found')) {
-      styledHTML += `<span style="color: #ef4444; background: #fef2f2; padding: 2px 4px;">${escapedLine}</span>\n`;
-    } else if (trimmedLine.startsWith('WebUI.')) {
-      styledHTML += `<span style="color: #3b82f6; font-weight: bold;">${escapedLine}</span>\n`;
-    } else if (trimmedLine.startsWith('//')) {
-      styledHTML += `<span style="color: #6b7280;">${escapedLine}</span>\n`;
-    } else {
-      styledHTML += `${escapedLine}\n`;
-    }
-  });
-  
-  scriptElement.innerHTML = `<pre style="margin: 0; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4;">${styledHTML}</pre>`;
-  window.generatedScript = script;
-  
-  console.log('✅ 완벽한 융합 매핑 스크립트 표시 완료');
-}
-
-/**
- * 매핑 상태 업데이트
- */
-function updateMappingStatus(hasMappings) {
-  const indicator = document.getElementById('mappingIndicator');
-  if (indicator) {
-    if (hasMappings) {
-      indicator.classList.remove('no-mapping');
-      indicator.classList.add('supabase-mapping');
-      indicator.title = '완벽한 융합 매핑 활성화 (오프라인 100% 수준)';
-    } else {
-      indicator.classList.add('no-mapping');
-      indicator.classList.remove('supabase-mapping');
-    }
-  }
-}
-
-/**
- * 성공 메시지 표시
- */
-function showSuccess(message) {
-  console.log('✅', message);
-  if (typeof window.showSuccess === 'function') {
-    window.showSuccess(message);
-  }
-}
-
-/**
- * 에러 메시지 표시  
- */
-function showError(message) {
-  console.error('❌', message);
-  if (typeof window.showError === 'function') {
-    window.showError(message);
-  }
-}
-
 // ================================
-// 하위 호환성을 위한 기존 함수들
+// 전역 함수 등록
 // ================================
 
-/**
- * 스마트 기본 매핑 생성 (하위 호환성)
- */
-function generateSmartDefaultMapping(text, keywords) {
-  const lowerText = text.toLowerCase();
-  const allKeywords = keywords.concat(text.toLowerCase().split(/\s+/));
-  
-  // 입력 관련 키워드 확인
-  const inputKeywords = ['입력', '필드', '비밀번호', 'password', '패스워드', '아이디', 'id', '이메일', 'email'];
-  const hasInputKeyword = inputKeywords.some(keyword => allKeywords.includes(keyword));
-  
-  // 클릭 관련 키워드 확인
-  const clickKeywords = ['클릭', '버튼', 'click', 'button', '선택', '체크'];
-  const hasClickKeyword = clickKeywords.some(keyword => allKeywords.includes(keyword));
-  
-  // 확인/검증 관련 키워드 확인
-  const verifyKeywords = ['확인', '검증', '성공', '실패', '메시지', '표시', '나타남'];
-  const hasVerifyKeyword = verifyKeywords.some(keyword => allKeywords.includes(keyword));
-  
-  // 페이지/이동 관련 키워드 확인
-  const navigateKeywords = ['페이지', '이동', '열기', '접속', '사이트'];
-  const hasNavigateKeyword = navigateKeywords.some(keyword => allKeywords.includes(keyword));
-  
-  // 우선순위에 따른 매핑 결정
-  if (hasInputKeyword) {
-    return {
-      action: 'Set Text',
-      type: 'input',
-      selector: getInputSelector(allKeywords),
-      description: '텍스트 입력 (스마트 매핑)'
-    };
-  } else if (hasClickKeyword) {
-    return {
-      action: 'Click',
-      type: 'click',
-      selector: getClickSelector(allKeywords),
-      description: '클릭 액션 (스마트 매핑)'
-    };
-  } else if (hasVerifyKeyword) {
-    return {
-      action: 'Verify Element Present',
-      type: 'verification',
-      selector: '.result-message',
-      description: '요소 확인 (스마트 매핑)'
-    };
-  } else if (hasNavigateKeyword) {
-    return {
-      action: 'Navigate To Url',
-      type: 'navigation',
-      url: 'about:blank',
-      description: '페이지 이동 (스마트 매핑)'
-    };
-  }
-  
-  return null;
-}
-
-/**
- * 입력 필드 셀렉터 결정 (하위 호환성)
- */
-function getInputSelector(keywords) {
-  if (keywords.includes('비밀번호') || keywords.includes('password') || keywords.includes('패스워드')) {
-    return 'input[type="password"]';
-  } else if (keywords.includes('아이디') || keywords.includes('id')) {
-    return 'input[type="text"], input[name*="id"]';
-  } else if (keywords.includes('이메일') || keywords.includes('email')) {
-    return 'input[type="email"]';
-  }
-  return 'input[type="text"]';
-}
-
-/**
- * 클릭 요소 셀렉터 결정 (하위 호환성)
- */
-function getClickSelector(keywords) {
-  if (keywords.includes('로그인') || keywords.includes('login')) {
-    return 'button[type="submit"], input[type="submit"], .login-btn';
-  } else if (keywords.includes('버튼') || keywords.includes('button')) {
-    return 'button';
-  }
-  return 'button, .btn';
-}
-
-/**
- * 카탈론 스크립트 생성 (하위 호환성)
- */
-function generateKatalonScript(mapping, originalText) {
-  if (!mapping || !mapping.action) {
-    return `// TODO: No action found for: "${originalText}"\n`;
-  }
-  
-  let script = '';
-  
-  // Navigate To Url은 헤더에서 이미 처리했으므로 스킵
-  if (mapping.action === 'Navigate To Url' || mapping.type === 'navigation') {
-    return `// Navigation already handled in header\n`;
-  }
-  
-  switch (mapping.type || 'unknown') {
-    case 'click':
-      script = `WebUI.click(findTestObject('Object Repository/Page/btn_click'))\n`;
-      break;
-    case 'input':
-      script = `WebUI.setText(findTestObject('Object Repository/Page_/input_text'), 'testvalue')\n`;
-      break;
-    case 'verification':
-      script = `WebUI.verifyElementPresent(findTestObject('Object Repository/Page/element'), 10)\n`;
-      break;
-    default:
-      script = `WebUI.comment('${mapping.action}')\n`;
-  }
-  
-  return script;
-}
-
-/**
- * 스크립트 들여쓰기 (하위 호환성)
- */
-function indentScript(script) {
-  return script.split('\n').map(line => {
-    if (line.trim() === '') return line;
-    return '        ' + line;
-  }).join('\n');
-}
-
-// ================================
-// 전역 함수 등록 (HTML에서 호출용)
-// ================================
-
-// 기존 파싱 함수는 testcase_parser.js에서 처리
 window.extractTestcaseData = extractTestcaseData;
-
-// 완벽한 융합 매핑 전용 함수
 window.generateMappingScript = generateMappingScript;
-
-// 완벽한 오프라인 수준 강화 함수들
-window.generateSmartObjectRepository = generateSmartObjectRepository;
-window.determineSmartAction = determineSmartAction;
-window.generateEnhancedGroovyScript = generateEnhancedGroovyScript;
-window.generateGroovyFromSupabaseMapping = generateGroovyFromSupabaseMapping;
-window.countUniqueActions = countUniqueActions;
-
-// UI 제어 함수들
 window.copyScript = copyScript;
-window.resetInput = resetInput;
-window.resetParsing = resetParsing;
-window.resetScript = resetScript;
 
-// 하위 호환성 함수들
-window.generateSmartDefaultMapping = generateSmartDefaultMapping;
-window.getInputSelector = getInputSelector;
-window.getClickSelector = getClickSelector;
-window.generateKatalonScript = generateKatalonScript;
-window.indentScript = indentScript;
-
-console.log('🎉 완벽한 융합 매핑 시스템 로드 완료! (오프라인 100% 수준 달성)');
+console.log('✅ 간단한 테스트케이스 매핑 시스템 로드 완료 (200줄 버전)');
