@@ -184,9 +184,9 @@ function executeMerge() {
 
   tcMergedExport = [];
   let html = `<table class="tcmerger-table"><thead><tr>
-    <th>Folder</th><th>Main Category</th><th>Sub Category</th><th>Detail Category</th>
-    <th>TC Summary</th><th>Precondition</th><th>Test Level</th>
-    <th>Expected Result</th><th>Steps</th>
+      <th>Folder</th><th>Main Category</th><th>Sub Category</th><th>Detail Category</th>
+      <th>Summary</th><th>Precondition</th><th>Test Level</th>
+      <th>Expected Result</th><th>Steps</th>
   </tr></thead><tbody>`;
 
   tcMergeData.forEach((row, index) => {
@@ -215,27 +215,27 @@ function executeMerge() {
     const numberedExpectedResult = addNumberingToText(expectedResult);
     
     tcMergedExport.push({
-      'Folder': row['Folder'],
-      'Main Category': row['Main Category'],
-      'Sub Category': row['Sub Category'],
-      'Detail Category': row['Detail Category'],
-      'TC Summary': row['TC Summary'],
-      'Precondition': row['Precondition'],
-      'Test Level': row['Test Level'],
-      'Expected Result': numberedExpectedResult,
-      'Steps': finalCombinedSteps
+        'Folder': row['Folder'],
+        'Main Category': row['Main Category'],
+        'Sub Category': row['Sub Category'],
+        'Detail Category': row['Detail Category'],
+        'Summary': row['TC Summary'] || row['Summary'] || '',
+        'Precondition': row['Precondition'],
+        'Test Level': row['Test Level'],
+        'Expected Result': numberedExpectedResult,
+        'Steps': finalCombinedSteps
     });
-    
+        
     html += `<tr>
-      <td>${preserveLineBreaks(row['Folder'])}</td>
-      <td>${preserveLineBreaks(row['Main Category'])}</td>
-      <td>${preserveLineBreaks(row['Sub Category'])}</td>
-      <td>${preserveLineBreaks(row['Detail Category'])}</td>
-      <td>${preserveLineBreaks(row['TC Summary'])}</td>
-      <td>${preserveLineBreaks(row['Precondition'])}</td>
-      <td>${preserveLineBreaks(row['Test Level'])}</td>
-      <td>${preserveLineBreaks(numberedExpectedResult)}</td>
-      <td>${preserveLineBreaks(finalCombinedSteps)}</td>
+        <td>${preserveLineBreaks(row['Folder'])}</td>
+        <td>${preserveLineBreaks(row['Main Category'])}</td>
+        <td>${preserveLineBreaks(row['Sub Category'])}</td>
+        <td>${preserveLineBreaks(row['Detail Category'])}</td>
+        <td>${preserveLineBreaks(row['TC Summary'] || row['Summary'] || '')}</td>
+        <td>${preserveLineBreaks(row['Precondition'])}</td>
+        <td>${preserveLineBreaks(row['Test Level'])}</td>
+        <td>${preserveLineBreaks(numberedExpectedResult)}</td>
+        <td>${preserveLineBreaks(finalCombinedSteps)}</td>
     </tr>`;
   });
   
